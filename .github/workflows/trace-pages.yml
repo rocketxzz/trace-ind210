@@ -1,0 +1,52 @@
+name: Publish Trace
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish after validating the archive
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [trace-release.zip]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trace-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate and unpack the clean release
+        run: |
+          echo '35a40380b3b993f5f016476bb14c9b8d696af3b7859c00b2cb73d52bcb8873ad  trace-release.zip' | sha256sum -c -
+          unzip -q trace-release.zip -d _site
+          test -s _site/index.html
+          test -s _site/assets/deck_v3.js
+          test ! -e _site/assets/survey_stats.js
+          test ! -e _site/assets/survey_stats.json
+      - uses: actions/upload-pages-artifact@v4
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        with:
+          path: _site
+
+  deploy:
+    if: ${{ github.event_name == 'push' || inputs.publish }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
